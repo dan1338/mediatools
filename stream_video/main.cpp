@@ -1,10 +1,14 @@
 #include "video_source/IVideoSource.h"
+#include "server.h"
 #include <cstdio>
 
 int main(int argc, char **argv)
 {
     auto video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
     const auto video_format = video_source->get_video_format();
+
+    VideoServer server("0.0.0.0", 9000, video_format);
+    server.await_connection();
 
     video_source->handle_read_frame([&](VideoFrame frame) {
         printf("uvc_read_frame (%u bytes)\n", frame.data_size);
@@ -16,6 +20,8 @@ int main(int argc, char **argv)
             printf("[!] incomplete frame\n");
             return;
         }
+
+        server.send_frame(frame.data, imgdata_size);
     });
 
     video_source->start();
