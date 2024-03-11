@@ -1,4 +1,5 @@
-#include "video_source/IVideoSource.h"
+#include "VideoSource/IVideoSource.h"
+#include "VideoFrame.h"
 #include <arpa/inet.h>
 #include <string>
 #include <sys/socket.h>
@@ -9,7 +10,7 @@
 class VideoServer
 {
 private:
-    VideoFormat _format;
+    VideoFrame::Format _format;
     int _listen_fd;
     int _con_fd;
     int _dgram_fd;
@@ -18,12 +19,12 @@ private:
     sockaddr_in _client_sa;
 
 public:
-    VideoServer(const std::string bind_addr, int bind_port, VideoFormat format)
+    VideoServer(const std::string bind_addr, int bind_port, VideoFrame::Format format)
     {
         _format.width = htons(format.width);
         _format.height = htons(format.height);
-        _format.num_channels = format.num_channels;
-        _format.bits_per_pixels = format.bits_per_pixels;
+        _format.num_components = format.num_components;
+        _format.bits_per_pixel = format.bits_per_pixel;
 
         _listen_fd = socket(AF_INET, SOCK_STREAM, 0);
         _dgram_fd = socket(AF_INET, SOCK_DGRAM, 0);

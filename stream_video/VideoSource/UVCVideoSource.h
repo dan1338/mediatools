@@ -14,7 +14,7 @@ private:
     const uvc_format_desc_t *_format_descs;
     uvc_stream_ctrl_t _stream_ctrl;
 
-    VideoFormat _video_format;
+	VideoFrame::Format _video_format;
     ReadFrameHandler _read_frame_handler;
 
     void shutter();
@@ -23,8 +23,8 @@ private:
 public:
     UVCVideoSource();
 
-    void handle_read_frame(const ReadFrameHandler &handler) override;
-    VideoFormat get_video_format() override;
-    bool start() override;
+    auto handle_read_frame(const ReadFrameHandler &handler) -> void override;
+    auto get_video_format() -> VideoFrame::Format override;
+    auto start() -> bool override;
 };
 

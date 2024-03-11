@@ -1,5 +1,5 @@
-#include "video_source/IVideoSource.h"
-#include "server.h"
+#include "VideoSource/IVideoSource.h"
+#include "Server.h"
 #include <cstdio>
 
 int main(int argc, char **argv)
@@ -10,18 +10,18 @@ int main(int argc, char **argv)
     VideoServer server("0.0.0.0", 9000, video_format);
     server.await_connection();
 
-    video_source->handle_read_frame([&](VideoFrame frame) {
-        printf("uvc_read_frame (%u bytes)\n", frame.data_size);
+    video_source->handle_read_frame([&](VideoFramePtr frame) {
+        printf("uvc_read_frame (%zu bytes)\n", frame->buffer.size());
 
         size_t imgdata_size = video_format.width * video_format.height * 2;
 
-        if (imgdata_size < frame.data_size)
+        if (imgdata_size < frame->buffer.size())
         {
             printf("[!] incomplete frame\n");
             return;
         }
 
-        server.send_frame(frame.data, imgdata_size);
+        server.send_frame(frame->buffer.data(), imgdata_size);
     });
 
     video_source->start();

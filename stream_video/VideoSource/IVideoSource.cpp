@@ -1,7 +1,7 @@
 #include "IVideoSource.h"
 #include "UVCVideoSource.h"
 
-IVideoSourcePtr open_video_source(VideoSourceType type, const VideoSourceParams &params)
+auto open_video_source(VideoSourceType type, const VideoSourceParams &params) -> IVideoSourcePtr
 {
     if (type == VideoSourceType::VIDEO_SOURCE_UVC_CAMERA)
     {
