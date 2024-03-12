@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VideoFrame.h"
+#include <memory>
 
 class IVideoRx
 {
@@ -11,3 +12,4 @@ public:
     virtual auto recv_frame() -> VideoFramePtr = 0;
 };
 
+using IVideoRxPtr = std::unique_ptr<IVideoRx>;

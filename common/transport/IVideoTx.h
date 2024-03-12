@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include "VideoFrame.h"
 
 class IVideoTx
@@ -17,3 +18,4 @@ public:
     virtual auto send_frame(const VideoFramePtr &frame) -> void = 0;
 };
 
+using IVideoTxPtr = std::unique_ptr<IVideoTx>;

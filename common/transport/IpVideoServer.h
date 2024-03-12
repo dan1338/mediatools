@@ -31,5 +31,6 @@ private:
     int _stream_fd;
     int _dgram_fd;
 
+    uint32_t _frame_id;
 };
 

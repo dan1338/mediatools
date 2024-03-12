@@ -1,19 +1,43 @@
 #include "VideoSource/IVideoSource.h"
-#include "Server.h"
+#include "transport/IpVideoServer.h"
 #include <cstdio>
+#include <err.h>
+
+struct VideoStremerContext
+{
+    IVideoSourcePtr video_source;
+    IVideoTxPtr video_tx;
+};
+
+VideoStremerContext create_context(int argc, char **argv)
+{
+    VideoStremerContext ret;
+
+    if (argc < 3)
+        errx(1, "usage: [listen_addr] [listen_port]");
+
+    const auto listen_addr = argv[1];
+    const auto listen_port = std::stoi(argv[2]);
+
+    ret.video_tx = std::make_unique<IpVideoServer>(listen_addr, listen_port);
+    ret.video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
+
+    return ret;
+}
 
 int main(int argc, char **argv)
 {
-    auto video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
-    const auto video_format = video_source->get_video_format();
+    auto ctx = create_context(argc, argv);
 
-    VideoServer server("0.0.0.0", 9000, video_format);
-    server.await_connection();
+    const auto frame_format = ctx.video_source->get_video_format();
 
-    video_source->handle_read_frame([&](VideoFramePtr frame) {
+    ctx.video_tx->set_frame_format(frame_format);
+    ctx.video_tx->await_connection();
+
+    ctx.video_source->handle_read_frame([&](VideoFramePtr frame) {
         printf("uvc_read_frame (%zu bytes)\n", frame->buffer.size());
 
-        size_t imgdata_size = video_format.width * video_format.height * 2;
+        size_t imgdata_size = frame_format.width * frame_format.height * 2;
 
         if (imgdata_size < frame->buffer.size())
         {
@@ -21,10 +45,15 @@ int main(int argc, char **argv)
             return;
         }
 
-        server.send_frame(frame->buffer.data(), imgdata_size);
+        ctx.video_tx->send_frame(frame);
     });
 
-    video_source->start();
+    ctx.video_source->start();
+
+    while (1)
+    {
+        ctx.video_tx->poll_client();
+    }
 
     return 0;
 }

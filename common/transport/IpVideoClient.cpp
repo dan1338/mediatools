@@ -5,8 +5,13 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
+static int connect_(int fd, const struct sockaddr *addr, socklen_t len)
+{
+    return connect(fd, addr, len);
+}
+
 IpVideoClient::IpVideoClient(const std::string &connect_addr, int connect_port):
-    _frame_format{nullptr}
+    _frame_format{nullptr}, _last_frame_id{0}, _expected_num_fragments{0}
 {
     _connect_sa.sin_family = AF_INET;
     _connect_sa.sin_addr.s_addr = inet_addr(connect_addr.c_str());
@@ -25,7 +30,7 @@ IpVideoClient::IpVideoClient(const std::string &connect_addr, int connect_port):
 
 auto IpVideoClient::connect() -> void
 {
-    if (connect(_stream_fd, (sockaddr*)&_connect_sa, sizeof _connect_sa) == -1)
+    if (connect_(_stream_fd, (sockaddr*)&_connect_sa, sizeof _connect_sa) == -1)
         err(1, "connect");
 
     uint16_t recv_port = htons(ntohs(_connect_sa.sin_port) + 1);
@@ -61,17 +66,58 @@ auto IpVideoClient::send_control_message() -> void
 
 auto IpVideoClient::recv_frame() -> VideoFramePtr
 {
-    ssize_t ret;
+    size_t total_size = 0;
+    uint8_t got_num_fragments = 0;
 
-    ret = recv(_dgram_fd, _frame_buffer.data(), _frame_buffer.size() - 1500, 0);
+    msghdr msg = {0};
+    iovec io[2];
 
-    if (ret == -1)
-        err(1, "recv");
+    uint32_t frag_hdr[4];
+
+    io[0].iov_base = frag_hdr;
+    io[0].iov_len = sizeof frag_hdr;
+
+    std::array<uint8_t, 65535-2000> tmp;
+
+    io[1].iov_base = tmp.data();
+    io[1].iov_len = tmp.size();
+
+    do
+    {
+        ssize_t recv_size;
+
+        if (recv_size = recvmsg(_dgram_fd, &msg, 0); recv_size == -1)
+        {
+            err(1, "recvmsg");
+        }
+
+        uint32_t frame_id = frag_hdr[0];
+        uint32_t frag_id = frag_hdr[1];
+        uint32_t expect_num_frag = frag_hdr[2];
+        uint32_t frag_offset = frag_hdr[3];
+
+        if (frame_id != _last_frame_id || _expected_num_fragments == 0)
+        {
+            _last_frame_id = frame_id;
+            _expected_num_fragments = expect_num_frag;
+            got_num_fragments = 1;
+        }
+        else
+        {
+            ++got_num_fragments;
+        }
+
+        size_t payload_size = (recv_size - sizeof frag_hdr);
+        total_size += payload_size;
+
+        memcpy(_frame_buffer.data() + frag_offset, tmp.data(), payload_size);
+    }
+    while (got_num_fragments < _expected_num_fragments);
 
     auto video_frame = std::make_shared<VideoFrame>();
-    video_frame->buffer.resize(ret);
+    video_frame->buffer.resize(total_size);
 
-    memcpy(video_frame->buffer.data(), _frame_buffer.data(), ret);
+    memcpy(video_frame->buffer.data(), _frame_buffer.data(), total_size);
 
     return video_frame;
 }

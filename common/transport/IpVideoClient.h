@@ -22,6 +22,8 @@ public:
 private:
     std::unique_ptr<VideoFrame::Format> _frame_format;
     std::array<uint8_t, 65535> _frame_buffer;
+    uint32_t _last_frame_id;
+    uint8_t _expected_num_fragments;
 
     sockaddr_in _connect_sa;
 

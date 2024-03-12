@@ -9,5 +9,6 @@ target_include_directories(common
 target_sources(common
     PRIVATE
     ./JpegLs.cpp
+    ./transport/IpVideoClient.cpp
     ./transport/IpVideoServer.cpp)
 

@@ -1,9 +1,11 @@
 #include "transport/IpVideoServer.h"
+#include <algorithm>
+#include <cstring>
 #include <err.h>
 #include <sys/socket.h>
 
 IpVideoServer::IpVideoServer(const std::string &listen_addr, int listen_port):
-    _frame_format{nullptr}, _control_message_handler{nullptr}
+    _frame_format{nullptr}, _control_message_handler{nullptr}, _frame_id{0}
 {
     _listen_sa.sin_family = AF_INET;
     _listen_sa.sin_addr.s_addr = inet_addr(listen_addr.c_str());
@@ -71,14 +73,46 @@ auto IpVideoServer::poll_client() -> void
 
 auto IpVideoServer::send_frame(const VideoFramePtr &frame) -> void
 {
-    ssize_t ret;
+    constexpr size_t max_msg_size = 65535 - 2000;
 
-    ret = sendto(_dgram_fd, frame->buffer.data(), frame->buffer.size(), 0,
-            (sockaddr*)&_client_sa, sizeof _client_sa);
+    size_t current_pos = 0;
+    size_t bytes_remaining = frame->buffer.size();
 
-    if (ret != frame->buffer.size())
+    uint8_t frag_id = 0;
+    uint8_t num_fragments = (bytes_remaining + max_msg_size) / max_msg_size;
+
+    while (bytes_remaining)
     {
-        warn("send (incomplete)");
+        msghdr msg;
+        iovec io[2];
+
+        uint32_t frag_hdr[4] = {_frame_id, frag_id++, num_fragments, (uint32_t)current_pos};
+
+        io[0].iov_base = frag_hdr;
+        io[0].iov_len = sizeof frag_hdr;
+
+        size_t payload_size = std::min(max_msg_size, bytes_remaining);
+
+        io[1].iov_base = frame->buffer.data() + current_pos;
+        io[1].iov_len = payload_size;
+
+        memcpy(msg.msg_name, &_client_sa, sizeof _client_sa);
+        msg.msg_namelen = sizeof _client_sa;
+        msg.msg_iov = io;
+        msg.msg_iovlen = 2;
+        msg.msg_control = 0;
+        msg.msg_controllen = 0;
+        msg.msg_flags = 0;
+
+        if (sendmsg(_dgram_fd, &msg, 0) == -1)
+        {
+            err(1, "sendmsg");
+        }
+
+        current_pos += payload_size;
+        bytes_remaining -= payload_size;
     }
+
+    ++_frame_id;
 }
 
