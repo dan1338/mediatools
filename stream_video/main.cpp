@@ -9,6 +9,7 @@ struct VideoStremerContext
 {
     IVideoSourcePtr video_source;
     IVideoTxPtr video_tx;
+    JpegLsEncoder jpeg_encoder;
     FramePipeline<VideoFrame> pre_tx_pipeline;
 };
 
@@ -25,7 +26,7 @@ VideoStremerContext create_context(int argc, char **argv)
     ret.video_tx = std::make_unique<IpVideoServer>(listen_addr, listen_port);
     ret.video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
 
-    ret.pre_tx_pipeline.make_component<JpegLsEncoder>();
+    ret.pre_tx_pipeline.add_component(&ret.jpeg_encoder);
 
     return ret;
 }
@@ -36,6 +37,7 @@ int main(int argc, char **argv)
 
     const auto frame_format = ctx.video_source->get_video_format();
 
+    ctx.jpeg_encoder.set_frame_format(frame_format);
     ctx.video_tx->set_frame_format(frame_format);
     ctx.video_tx->await_connection();
 
