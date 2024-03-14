@@ -2,11 +2,12 @@
 
 std::shared_ptr<VideoFrame> JpegLsEncoder::process_frame(const std::shared_ptr<VideoFrame> &frame)
 {
+    _jpegls_encoder.rewind();
+
     size_t out_size = _jpegls_encoder.encode(frame->buffer.data(), frame->buffer.size());
-    _dest_buffer.resize(out_size);
 
     return std::make_shared<VideoFrame>(VideoFrame{
-        _dest_buffer,
+        {_dest_buffer.data(), _dest_buffer.data() + out_size},
         VideoFrame::Compression::JPEG_LS
     });
 }
