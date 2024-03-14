@@ -23,7 +23,7 @@ public:
 
     void add_component(IComponent *component)
     {
-        _components.emplace_back(component, false);
+        _components.push_back({component, false});
     }
 
     template<typename ComponentT, typename... Args>
