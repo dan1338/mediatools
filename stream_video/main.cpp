@@ -39,7 +39,7 @@ int main(int argc, char **argv)
 
         size_t imgdata_size = frame_format.width * frame_format.height * 2;
 
-        if (imgdata_size < frame->buffer.size())
+        if (frame->buffer.size() < imgdata_size)
         {
             printf("[!] incomplete frame\n");
             return;

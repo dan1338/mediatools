@@ -1,6 +1,7 @@
 #include "transport/IpVideoClient.h"
 #include "VideoFrame.h"
 #include <cstring>
+#include <cstdio>
 #include <err.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -69,7 +70,7 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
     size_t total_size = 0;
     uint8_t got_num_fragments = 0;
 
-    msghdr msg = {0};
+    msghdr msg = {};
     iovec io[2];
 
     uint32_t frag_hdr[4];
@@ -82,28 +83,46 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
     io[1].iov_base = tmp.data();
     io[1].iov_len = tmp.size();
 
+	msg.msg_iov = io;
+	msg.msg_iovlen = 2;
+
     do
     {
         ssize_t recv_size;
 
-        if (recv_size = recvmsg(_dgram_fd, &msg, 0); recv_size == -1)
-        {
-            err(1, "recvmsg");
-        }
+		do
+		{
+			if (recv_size = recvmsg(_dgram_fd, &msg, 0); recv_size == -1)
+			{
+				err(1, "recvmsg");
+			}
+
+			printf("[.] recvmsg -> %zd\n", recv_size);
+		}
+		while (!recv_size);
 
         uint32_t frame_id = frag_hdr[0];
         uint32_t frag_id = frag_hdr[1];
         uint32_t expect_num_frag = frag_hdr[2];
         uint32_t frag_offset = frag_hdr[3];
 
+        printf("- frame_id = %d\n", frame_id);
+        printf("- frag_id = %d\n", frag_id);
+        printf("- expect_num_frag = %d\n", expect_num_frag);
+        printf("- frag_offset = %d\n", frag_offset);
+
         if (frame_id != _last_frame_id || _expected_num_fragments == 0)
         {
+			printf("[.] set frame_id = %d\n", frame_id);
+
             _last_frame_id = frame_id;
             _expected_num_fragments = expect_num_frag;
             got_num_fragments = 1;
         }
         else
         {
+			printf("[.] got fragment = %d, (%d offset)\n", frag_id, frag_offset);
+
             ++got_num_fragments;
         }
 
@@ -113,6 +132,8 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
         memcpy(_frame_buffer.data() + frag_offset, tmp.data(), payload_size);
     }
     while (got_num_fragments < _expected_num_fragments);
+
+	printf("[*] collected VideoFrame\n");
 
     auto video_frame = std::make_shared<VideoFrame>();
     video_frame->buffer.resize(total_size);

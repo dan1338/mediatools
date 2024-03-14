@@ -1,6 +1,7 @@
 #include "UVCVideoSource.h"
 #include "libuvc/libuvc.h"
 #include <cstdint>
+#include <cstring>
 #include <err.h>
 
 #define UVC_SHUTTER 0x8000
@@ -13,7 +14,7 @@ UVCVideoSource::UVCVideoSource()
     if (err = uvc_init(&_ctx, 0); err != UVC_SUCCESS)
         errx(1, "uvc_init (%s)", uvc_strerror(err));
 
-    int vid{0}, pid{0};
+    int vid{0x1514}, pid{0x0001};
     const char *sn = nullptr;
 
     if (err = uvc_find_device(_ctx, &_dev, vid, pid, sn); err != UVC_SUCCESS)
@@ -63,16 +64,6 @@ auto UVCVideoSource::get_video_format() -> VideoFrame::Format
 struct CallbackState
 {
 	IVideoSource::ReadFrameHandler *handler;
-
-	CallbackState()
-	{
-		puts("CallbackState");
-	}
-
-	~CallbackState()
-	{
-		puts("~CallbackState");
-	}
 };
 
 void frame_callback(uvc_frame *uvc_frame, void *user_ptr)
@@ -80,17 +71,21 @@ void frame_callback(uvc_frame *uvc_frame, void *user_ptr)
 	const auto *cb_state = (CallbackState*)user_ptr;
 
 	auto video_frame = std::make_shared<VideoFrame>();
+	video_frame->buffer.resize(uvc_frame->data_bytes);
+	memcpy(video_frame->buffer.data(), uvc_frame->data, uvc_frame->data_bytes);
+
     (*cb_state->handler)(video_frame);
 }
+
+static CallbackState _cb_state;
 
 bool UVCVideoSource::start()
 {
     uvc_error_t err;
 
-	auto cb_state = std::make_unique<CallbackState>();
-	cb_state->handler = &_read_frame_handler;
+	_cb_state.handler = &_read_frame_handler;
 
-    if (err = uvc_start_streaming(_handle, &_stream_ctrl, frame_callback, (void*)cb_state.get(), 0); err != UVC_SUCCESS)
+    if (err = uvc_start_streaming(_handle, &_stream_ctrl, frame_callback, &_cb_state, 0); err != UVC_SUCCESS)
 
     {
         warnx("uvc_start_streaming (%s)", uvc_strerror(err));

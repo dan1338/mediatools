@@ -57,7 +57,7 @@ auto IpVideoServer::await_connection() -> void
     uint16_t reply_port;
     recv(_stream_fd, &reply_port, sizeof reply_port, MSG_WAITALL);
 
-    _client_sa.sin_port = ntohs(reply_port);
+    _client_sa.sin_port = reply_port;
 
     if (!_frame_format)
         errx(1, "no frame format set");
@@ -81,9 +81,11 @@ auto IpVideoServer::send_frame(const VideoFramePtr &frame) -> void
     uint8_t frag_id = 0;
     uint8_t num_fragments = (bytes_remaining + max_msg_size) / max_msg_size;
 
+	printf("[.] sending frame = %d\n", _frame_id);
+
     while (bytes_remaining)
     {
-        msghdr msg;
+        msghdr msg = {};
         iovec io[2];
 
         uint32_t frag_hdr[4] = {_frame_id, frag_id++, num_fragments, (uint32_t)current_pos};
@@ -91,12 +93,16 @@ auto IpVideoServer::send_frame(const VideoFramePtr &frame) -> void
         io[0].iov_base = frag_hdr;
         io[0].iov_len = sizeof frag_hdr;
 
+		printf("- bytes remaining = %zu\n", bytes_remaining);
+
         size_t payload_size = std::min(max_msg_size, bytes_remaining);
+
+		printf("- payload size = %zu\n", payload_size);
 
         io[1].iov_base = frame->buffer.data() + current_pos;
         io[1].iov_len = payload_size;
 
-        memcpy(msg.msg_name, &_client_sa, sizeof _client_sa);
+		msg.msg_name = &_client_sa;
         msg.msg_namelen = sizeof _client_sa;
         msg.msg_iov = io;
         msg.msg_iovlen = 2;
@@ -104,10 +110,14 @@ auto IpVideoServer::send_frame(const VideoFramePtr &frame) -> void
         msg.msg_controllen = 0;
         msg.msg_flags = 0;
 
-        if (sendmsg(_dgram_fd, &msg, 0) == -1)
+		ssize_t ret;
+
+        if (ret = sendmsg(_dgram_fd, &msg, 0); ret == -1)
         {
             err(1, "sendmsg");
         }
+
+		printf("[.] sendmsg -> %zd\n", ret);
 
         current_pos += payload_size;
         bytes_remaining -= payload_size;
