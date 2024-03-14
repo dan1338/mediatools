@@ -23,18 +23,18 @@ public:
 
     void add_component(IComponent *component)
     {
-        _components.emplace_back({component, false});
+        _components.emplace_back(component, false);
     }
 
     template<typename ComponentT, typename... Args>
     void make_component(Args&&... args)
     {
-        _components.emplace_back({new ComponentT(std::forward(args)...), true});
+        _components.push_back({new ComponentT(std::forward(args)...), true});
     }
 
     std::shared_ptr<FrameT> process_frame(std::shared_ptr<FrameT> frame)
     {
-        for (IComponent *component : _components)
+        for (auto &[component, _] : _components)
         {
             frame = component->process_frame(frame);
         }

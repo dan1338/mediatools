@@ -1,5 +1,7 @@
 #include "VideoSource/IVideoSource.h"
 #include "transport/IpVideoServer.h"
+#include "compression/JpegLs.h"
+#include "FramePipeline.h"
 #include <cstdio>
 #include <err.h>
 
@@ -7,6 +9,7 @@ struct VideoStremerContext
 {
     IVideoSourcePtr video_source;
     IVideoTxPtr video_tx;
+    FramePipeline<VideoFrame> pre_tx_pipeline;
 };
 
 VideoStremerContext create_context(int argc, char **argv)
@@ -21,6 +24,8 @@ VideoStremerContext create_context(int argc, char **argv)
 
     ret.video_tx = std::make_unique<IpVideoServer>(listen_addr, listen_port);
     ret.video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
+
+    ret.pre_tx_pipeline.make_component<JpegLsEncoder>();
 
     return ret;
 }
@@ -45,7 +50,8 @@ int main(int argc, char **argv)
             return;
         }
 
-        ctx.video_tx->send_frame(frame);
+        const auto processed_frame = ctx.pre_tx_pipeline.process_frame(frame);
+        ctx.video_tx->send_frame(processed_frame);
     });
 
     ctx.video_source->start();

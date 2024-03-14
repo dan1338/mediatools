@@ -4,3 +4,6 @@
 [submodule "libuvc"]
 	path = libuvc
 	url = https://github.com/libuvc/libuvc
+[submodule "charls"]
+	path = charls
+	url = http://github.com/team-charls/charls

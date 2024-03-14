@@ -1,8 +1,11 @@
 #include "transport/IVideoRx.h"
 #include "transport/IpVideoClient.h"
+#include "compression/JpegLs.h"
+#include "FramePipeline.h"
 #include "opencv2/opencv.hpp"
 #include <cmath>
 #include <cstdio>
+#include <opencv2/highgui.hpp>
 #include <sys/stat.h>
 #include <ctime>
 #include <err.h>
@@ -12,6 +15,7 @@
 struct VideoRecieverContext
 {
     IVideoRxPtr video_rx;
+    FramePipeline<VideoFrame> rx_pipeline;
 };
 
 VideoRecieverContext create_context(int argc, char **argv)
@@ -25,6 +29,7 @@ VideoRecieverContext create_context(int argc, char **argv)
     const auto connect_port = std::stoi(argv[2]);
 
     ret.video_rx = std::make_unique<IpVideoClient>(connect_addr, connect_port);
+    ret.rx_pipeline.make_component<JpegLsDecoder>();
 
     return ret;
 }
@@ -95,19 +100,28 @@ int main(int argc, char **argv)
 
 	while (1)
 	{
-		const auto frame = ctx.video_rx->recv_frame();
+        const auto frame = ctx.rx_pipeline.process_frame(ctx.video_rx->recv_frame());
+
 		//writer.write_frame(frame);
 
 		cv::Mat img(img_size, CV_16UC1, frame->buffer.data());
+
+        uint16_t vmin = 65535, vmax = 0;
 
 		for (size_t i = 0; i < img.size[0]*img.size[1]; i++)
 		{
 			uint16_t &v = img.at<uint16_t>(i);
 			//v = std::sqrt(v / 65535.0f) / 4;
-			v = std::max(0, v - 1500) * 10000 / 65535;
+			v = std::min(65535, std::max(0, v - 1500) * 65535 / 10000);
+
+            vmin = std::min(v, vmin);
+            vmax = std::max(v, vmax);
 		}
 
+        printf("vmin(%d) vmax(%d)\n", vmin, vmax);
+
 		cv::imshow("img", img);
+        cv::resizeWindow("img", 256 * 3, 192 * 3);
 		cv::waitKey(1);
 	}
 

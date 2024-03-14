@@ -6,9 +6,12 @@ add_library(common)
 target_include_directories(common
     PUBLIC
     .)
+target_link_libraries(common
+    PUBLIC
+    charls)
 target_sources(common
     PRIVATE
-    ./JpegLs.cpp
+    ./compression/JpegLs.cpp
     ./transport/IpVideoClient.cpp
     ./transport/IpVideoServer.cpp)
 
