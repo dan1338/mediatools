@@ -5,7 +5,9 @@
 #include "opencv2/opencv.hpp"
 #include <cmath>
 #include <cstdio>
+#include <opencv2/core.hpp>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <sys/stat.h>
 #include <ctime>
 #include <err.h>
@@ -105,23 +107,52 @@ int main(int argc, char **argv)
 		//writer.write_frame(frame);
 
 		cv::Mat img(img_size, CV_16UC1, frame->buffer.data());
+        cv::Mat big_img;
 
-        uint16_t vmin = 65535, vmax = 0;
+        std::array<uint32_t, 256> hist = {0};
 
 		for (size_t i = 0; i < img.size[0]*img.size[1]; i++)
 		{
 			uint16_t &v = img.at<uint16_t>(i);
-			//v = std::sqrt(v / 65535.0f) / 4;
-			v = std::min(65535, std::max(0, v - 1500) * 65535 / 10000);
 
-            vmin = std::min(v, vmin);
-            vmax = std::max(v, vmax);
+            hist[v / 256] += 1;
 		}
 
-        printf("vmin(%d) vmax(%d)\n", vmin, vmax);
+        uint32_t lo_thresh = 1000, hi_thresh = 200;
+        int lo_bin{-1}, hi_bin{-1};
 
-		cv::imshow("img", img);
-        cv::resizeWindow("img", 256 * 3, 192 * 3);
+        for (size_t i = 0; i < hist.size(); i++)
+        {
+            if (lo_bin == -1 && hist[i] > lo_thresh)
+            {
+                lo_bin = i;
+                hi_bin = i;
+            }
+            else if (hist[i] > hi_thresh)
+            {
+                hi_bin = i;
+            }
+        }
+
+        printf("hist: lo(%d) hi(%d) / %d - %d\n", lo_bin, hi_bin, lo_bin*256, (hi_bin + 1)*256);
+
+        uint16_t vmin = lo_bin * 256, vmax = ((hi_bin + 1) * 256 - 1);
+        uint16_t vspan = vmax - vmin;
+
+		for (size_t i = 0; i < img.size[0]*img.size[1]; i++)
+		{
+			uint16_t &v = img.at<uint16_t>(i);
+
+            v -= vmin;
+            v = 65535 * v / vspan;
+
+			//v = std::sqrt(v / 65535.0f) / 4;
+			//v = std::min(65535, std::max(0, v - 1500) * 65535 / 10000);
+		}
+
+        cv::rotate(img, img, cv::ROTATE_90_CLOCKWISE);
+        cv::resize(img, big_img, cv::Size(256*3, 196*3));
+		cv::imshow("img", big_img);
 		cv::waitKey(1);
 	}
 
