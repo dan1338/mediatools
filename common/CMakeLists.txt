@@ -12,6 +12,8 @@ target_link_libraries(common
 target_sources(common
     PRIVATE
     ./compression/JpegLs.cpp
+    ./storage/VideoSequenceReader.cpp
+    ./storage/VideoSequenceWriter.cpp
     ./transport/IpVideoClient.cpp
     ./transport/IpVideoServer.cpp)
 
