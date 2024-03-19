@@ -8,6 +8,7 @@ std::shared_ptr<VideoFrame> JpegLsEncoder::process_frame(const std::shared_ptr<V
 
     return std::make_shared<VideoFrame>(VideoFrame{
         {_dest_buffer.data(), _dest_buffer.data() + out_size},
+        frame->format,
         VideoFrame::Compression::JPEG_LS
     });
 }
@@ -39,6 +40,6 @@ std::shared_ptr<VideoFrame> JpegLsDecoder::process_frame(const std::shared_ptr<V
     _frame_format.num_components = frame_info.component_count;
     _frame_format.bits_per_pixel = frame_info.bits_per_sample;
 
-    return std::make_shared<VideoFrame>(VideoFrame{out_buffer});
+    return std::make_shared<VideoFrame>(VideoFrame{out_buffer, _frame_format});
 }
 
