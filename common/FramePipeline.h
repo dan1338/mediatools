@@ -29,7 +29,7 @@ public:
     template<typename ComponentT, typename... Args>
     void make_component(Args&&... args)
     {
-        _components.push_back({new ComponentT(std::forward(args)...), true});
+        _components.push_back({new ComponentT(std::forward<Args>(args)...), true});
     }
 
     std::shared_ptr<FrameT> process_frame(std::shared_ptr<FrameT> frame)
