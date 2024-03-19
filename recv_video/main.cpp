@@ -1,6 +1,7 @@
 #include "transport/IVideoRx.h"
 #include "transport/IpVideoClient.h"
 #include "compression/JpegLs.h"
+#include "storage/VideoSequenceWriter.h"
 #include "FramePipeline.h"
 #include "opencv2/opencv.hpp"
 #include <cmath>
@@ -32,6 +33,7 @@ VideoRecieverContext create_context(int argc, char **argv)
 
     ret.video_rx = std::make_unique<IpVideoClient>(connect_addr, connect_port);
     ret.rx_pipeline.make_component<JpegLsDecoder>();
+    ret.rx_pipeline.make_component<VideoSequenceWriter>("TEST_VIDEO");
 
     return ret;
 }
