@@ -11,4 +11,5 @@ target_sources(stream_video
     PRIVATE
 	./VideoSource/UVCVideoSource.cpp
 	./VideoSource/IVideoSource.cpp
+	./VideoSource/RecordingVideoSource.cpp
 	./main.cpp)

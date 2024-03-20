@@ -6,11 +6,11 @@
 #include <vector>
 #include <string>
 
-
 class VideoSequenceReader
 {
 public:
     VideoSequenceReader(const std::string &path);
+	auto rewind() -> void;
     auto read_frame() -> VideoFramePtr;
 
 private:

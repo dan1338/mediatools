@@ -2,6 +2,8 @@
 #include "transport/IpVideoServer.h"
 #include "compression/JpegLs.h"
 #include "FramePipeline.h"
+#include <cstring>
+#include <getopt.h>
 #include <cstdio>
 #include <err.h>
 
@@ -17,14 +19,50 @@ VideoStremerContext create_context(int argc, char **argv)
 {
     VideoStremerContext ret;
 
-    if (argc < 3)
-        errx(1, "usage: [listen_addr] [listen_port]");
+	bool use_usbdev{true};
+	std::string recording_path{""};
+	std::string listen_addr{"0.0.0.0"};
+	std::string listen_port{"9000"};
 
-    const auto listen_addr = argv[1];
-    const auto listen_port = std::stoi(argv[2]);
+	int ch;
+	while (ch = getopt(argc, argv, "l:f:"), ch != -1)
+	{
+		switch (ch)
+		{
+		case 'l':
+			if (auto delim = strcspn(optarg, ":"); delim != strlen(optarg))
+			{
+				if (auto addr = std::string{optarg}.substr(0, delim); addr.size())
+				{
+					listen_addr = addr;
+				}
+				if (auto port = std::string{optarg}.substr(delim + 1); port.size())
+				{
+					listen_port = port;
+				}
+			}
 
-    ret.video_tx = std::make_unique<IpVideoServer>(listen_addr, listen_port);
-    ret.video_source = open_video_source(VideoSourceType::VIDEO_SOURCE_UVC_CAMERA);
+			break;
+		case 'f':
+			recording_path = optarg;
+			use_usbdev = false;
+
+			break;
+		case '?':
+			errx(1, "usage: %s [-l [addr]:port] [-f file]", *argv);
+		}
+	}
+
+    ret.video_tx = std::make_unique<IpVideoServer>(listen_addr, std::stoi(listen_port));
+
+	if (!recording_path.empty())
+	{
+		ret.video_source = open_video_source(VideoSourceType::FILE_SEQ, {{"path", recording_path}, {"fps", "24"}});
+	}
+	else
+	{
+		ret.video_source = open_video_source(VideoSourceType::UVC_CAMERA);
+	}
 
     ret.pre_tx_pipeline.add_component(&ret.jpeg_encoder);
 

@@ -8,6 +8,7 @@ add_executable(recv_video)
 target_link_libraries(recv_video 
 	PRIVATE 
 	common
+	display
 	${OpenCV_LIBS})
 target_sources(recv_video
     PRIVATE

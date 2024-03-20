@@ -11,7 +11,8 @@
 
 enum class VideoSourceType
 {
-    VIDEO_SOURCE_UVC_CAMERA,
+    UVC_CAMERA,
+	FILE_SEQ,
 };
 
 class IVideoSource

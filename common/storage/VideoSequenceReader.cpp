@@ -17,6 +17,11 @@ VideoSequenceReader::VideoSequenceReader(const std::string &path):
     });
 }
 
+auto VideoSequenceReader::rewind() -> void
+{
+	_read_idx = 0;
+}
+
 auto VideoSequenceReader::read_frame() -> VideoFramePtr
 {
     if (_read_idx >= _files.size())

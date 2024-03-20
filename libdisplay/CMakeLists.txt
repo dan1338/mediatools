@@ -9,8 +9,7 @@ pkg_check_modules(gles2 REQUIRED glesv2)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-#add_library(display)
-add_executable(display)
+add_library(display)
 target_include_directories(display
     PUBLIC
     .)
@@ -21,5 +20,5 @@ target_link_libraries(display
     common)
 target_sources(display
     PRIVATE
-    ./main.cpp
+	#./main.cpp
     ./OpenGLVideoDisplay.cpp)
