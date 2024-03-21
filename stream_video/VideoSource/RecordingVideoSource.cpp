@@ -1,5 +1,4 @@
 #include "RecordingVideoSource.h"
-#include <bits/chrono.h>
 #include <chrono>
 
 RecordingVideoSource::RecordingVideoSource(const std::string &path, int fps):
