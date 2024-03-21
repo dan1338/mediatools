@@ -4,9 +4,10 @@ project(stream_video)
 
 add_executable(stream_video)
 target_link_libraries(stream_video 
-	PRIVATE 
-	LibUVC::UVC
-	common)
+    PRIVATE 
+    LibUVC::UVC
+    pthread
+    common)
 target_sources(stream_video
     PRIVATE
 	./VideoSource/UVCVideoSource.cpp
