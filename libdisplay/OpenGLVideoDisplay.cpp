@@ -1,6 +1,8 @@
 #include "IVideoDisplay.h"
 #include <GLES2/gl2.h>
+#ifndef __ANDROID__
 #include <GLFW/glfw3.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +19,7 @@ public:
     virtual auto swap_buffers() -> void = 0;
 };
 
+#ifndef __ANDROID__
 class GlfwWindow : public IWindow
 {
 public:
@@ -50,6 +53,7 @@ public:
 private:
     GLFWwindow *_handle;
 };
+#endif
 
 class Mesh
 {
@@ -269,8 +273,9 @@ auto OpenGLVideoDisplay::update() -> bool
     return !_window->should_close();
 }
 
+#ifndef __ANDROID__
 auto create_glfw_video_display(int width, int height) -> IVideoDisplay*
 {
     return new OpenGLVideoDisplay(new GlfwWindow(width, height));
 }
-
+#endif
