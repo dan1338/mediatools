@@ -5,6 +5,7 @@
 #include <err.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include "log.h"
 
 static int connect_(int fd, const struct sockaddr *addr, socklen_t len)
 {
@@ -21,18 +22,18 @@ IpVideoClient::IpVideoClient(const std::string &connect_addr, int connect_port):
     _stream_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (_stream_fd == -1)
-        err(1, "socket");
+        ERROR("socket(STREAM) -> -1 (%s)\n", strerror(errno));
 
     _dgram_fd = socket(AF_INET, SOCK_DGRAM, 0);
 
     if (_dgram_fd == -1)
-        err(1, "socket");
+        ERROR("socket(DGRAM) -> -1 (%s)\n", strerror(errno));
 }
 
 auto IpVideoClient::connect() -> void
 {
     if (connect_(_stream_fd, (sockaddr*)&_connect_sa, sizeof _connect_sa) == -1)
-        err(1, "connect");
+        ERROR("connect() -> 1 (%s)\n", strerror(errno));
 
     uint16_t recv_port = htons(ntohs(_connect_sa.sin_port) + 1);
 
@@ -42,15 +43,15 @@ auto IpVideoClient::connect() -> void
     dgram_sa.sin_port = recv_port;
 
     if (bind(_dgram_fd, (sockaddr*)&dgram_sa, sizeof dgram_sa) == -1)
-        err(1, "bind");
+        ERROR("bind() -> -1\n");
 
     if (send(_stream_fd, &recv_port, sizeof recv_port, 0) != sizeof recv_port)
-        err(1, "send");
+        ERROR("send() -> -1\n");
 
     VideoFrame::Format frame_format;
 
     if (recv(_stream_fd, &frame_format, sizeof frame_format, MSG_WAITALL) != sizeof frame_format)
-        err(1, "recv");
+        ERROR("recv() -> -1\n");
 
     frame_format.width = ntohs(frame_format.width);
     frame_format.height = ntohs(frame_format.height);
@@ -69,6 +70,7 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
 {
     size_t total_size = 0;
     uint8_t got_num_fragments = 0;
+    uint32_t frame_id;
 
     msghdr msg = {};
     iovec io[2];
@@ -97,23 +99,23 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
 				err(1, "recvmsg");
 			}
 
-			printf("[.] recvmsg -> %zd\n", recv_size);
+			DEBUG("[.] recvmsg -> %zd\n", recv_size);
 		}
 		while (!recv_size);
 
-        uint32_t frame_id = frag_hdr[0];
+        frame_id = frag_hdr[0];
         uint32_t frag_id = frag_hdr[1];
         uint32_t expect_num_frag = frag_hdr[2];
         uint32_t frag_offset = frag_hdr[3];
 
-        printf("- frame_id = %d\n", frame_id);
-        printf("- frag_id = %d\n", frag_id);
-        printf("- expect_num_frag = %d\n", expect_num_frag);
-        printf("- frag_offset = %d\n", frag_offset);
+        DEBUG("- frame_id = %d\n", frame_id);
+        DEBUG("- frag_id = %d\n", frag_id);
+        DEBUG("- expect_num_frag = %d\n", expect_num_frag);
+        DEBUG("- frag_offset = %d\n", frag_offset);
 
         if (frame_id != _last_frame_id || _expected_num_fragments == 0)
         {
-			printf("[.] set frame_id = %d\n", frame_id);
+			DEBUG("[.] set frame_id = %d\n", frame_id);
 
             _last_frame_id = frame_id;
             _expected_num_fragments = expect_num_frag;
@@ -121,7 +123,7 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
         }
         else
         {
-			printf("[.] got fragment = %d, (%d offset)\n", frag_id, frag_offset);
+			DEBUG("[.] got fragment = %d, (%d offset)\n", frag_id, frag_offset);
 
             ++got_num_fragments;
         }
@@ -133,12 +135,13 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
     }
     while (got_num_fragments < _expected_num_fragments);
 
-	printf("[*] collected VideoFrame\n");
-
     auto video_frame = std::make_shared<VideoFrame>();
     video_frame->buffer.resize(total_size);
+    video_frame->format = *_frame_format;
 
     memcpy(video_frame->buffer.data(), _frame_buffer.data(), total_size);
+
+    INFO("received frame (%d id, %d fragments, %zu size)\n", frame_id, got_num_fragments, total_size);
 
     return video_frame;
 }
@@ -146,7 +149,7 @@ auto IpVideoClient::recv_frame() -> VideoFramePtr
 auto IpVideoClient::get_frame_format() -> VideoFrame::Format
 {
     if (!_frame_format)
-        errx(1, "client not connected");
+        ERROR("client not connected");
 
     return *_frame_format.get();
 }
