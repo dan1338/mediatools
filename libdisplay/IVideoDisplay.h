@@ -12,3 +12,8 @@ public:
 
 extern auto create_glfw_video_display(int width, int height) -> IVideoDisplay*;
 
+#ifdef __ANDROID__
+#include <android/native_window.h>
+extern auto create_android_video_display(ANativeWindow *awindow) -> IVideoDisplay*;
+extern auto create_null_video_display() -> IVideoDisplay*;
+#endif
