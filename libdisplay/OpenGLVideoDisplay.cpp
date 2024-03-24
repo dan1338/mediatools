@@ -1,4 +1,5 @@
 #include <GLES2/gl2.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -6,20 +7,12 @@
 #include <unordered_map>
 #include <vector>
 #include <atomic>
+#include <array>
+#include <utility>
 #include "IVideoDisplay.h"
 #include "log.h"
 
-class IWindow
-{
-public:
-    virtual auto resize(int width, int height) -> void = 0;
-    virtual auto poll() -> void = 0;
-    virtual auto should_close() -> bool = 0;
-    virtual auto swap_buffers() -> void = 0;
-};
-
 #ifndef __ANDROID__
-
 #include <GLFW/glfw3.h>
 
 class GlfwWindow : public IWindow
@@ -55,169 +48,6 @@ public:
 private:
     GLFWwindow *_handle;
 };
-#else
-#include <EGL/egl.h>
-#include <android/native_window.h>
-
-class NullWindow : public IWindow
-{
-public:
-    auto resize(int width, int height) -> void {}
-    auto poll() -> void {}
-    auto should_close() -> bool {return false;}
-    auto swap_buffers() -> void {}
-};
-
-class AndroidWindow : public IWindow
-{
-public:
-    AndroidWindow()
-    {
-    }
-
-    void init_egl(ANativeWindow *awindow)
-    {
-        const EGLint attribs[] = {
-                EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-                EGL_BLUE_SIZE, 8,
-                EGL_GREEN_SIZE, 8,
-                EGL_RED_SIZE, 8,
-                EGL_NONE
-        };
-        EGLint pi32ConfigAttribs[] = {
-                EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                EGL_RED_SIZE, 8,
-                EGL_GREEN_SIZE, 8,
-                EGL_BLUE_SIZE, 8,
-                EGL_ALPHA_SIZE, 8,
-                EGL_DEPTH_SIZE, 0,
-                EGL_STENCIL_SIZE, 0,
-                EGL_NONE
-        };
-
-        EGLDisplay display;
-        EGLConfig config;
-        EGLint numConfigs;
-        EGLint format;
-        EGLSurface surface;
-        EGLContext context;
-        EGLint width;
-        EGLint height;
-        GLfloat ratio;
-
-        INFO("Initializing context");
-
-        display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        //display = eglGetCurrentDisplay();
-
-        if (display == EGL_NO_DISPLAY) {
-            ERROR("eglGetDisplay() returned error %d", eglGetError());
-            return;
-        }
-        if (!eglInitialize(display, 0, 0)) {
-            ERROR("eglInitialize() returned error %d", eglGetError());
-            return;
-        }
-
-        eglBindAPI(EGL_OPENGL_ES_API);
-
-        if (!eglChooseConfig(display, pi32ConfigAttribs, &config, 1, &numConfigs)) {
-            ERROR("eglChooseConfig() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        if (!eglGetConfigAttrib(display, config, EGL_NATIVE_VISUAL_ID, &format)) {
-            ERROR("eglGetConfigAttrib() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        const EGLint ctx_attrs[] = {
-                EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE
-        };
-
-        if (!(context = eglCreateContext(display, config, 0, ctx_attrs))) {
-            ERROR("eglCreateContext() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        ANativeWindow_setBuffersGeometry(awindow, 0, 0, format);
-
-        if (!(surface = eglCreateWindowSurface(display, config, awindow, 0))) {
-            ERROR("eglCreateWindowSurface() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        if (!eglMakeCurrent(display, surface, surface, context)) {
-            ERROR("eglMakeCurrent() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        if (!eglQuerySurface(display, surface, EGL_WIDTH, &width) ||
-            !eglQuerySurface(display, surface, EGL_HEIGHT, &height)) {
-            ERROR("eglQuerySurface() returned error %d", eglGetError());
-            //destroy();
-            return;
-        }
-
-        printf(
-                "Vendor: %s, Renderer: %s, Version: %s\n",
-                glGetString(GL_VENDOR),
-                glGetString(GL_RENDERER),
-                glGetString(GL_VERSION)
-        ) ;
-
-        printf("Extensions: %s\n", glGetString(GL_EXTENSIONS)) ;
-
-
-        _display = display;
-        _surface = surface;
-        _context = context;
-
-        //glDisable(GL_DITHER);
-        //glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
-        //glEnable(GL_CULL_FACE);
-        //glShadeModel(GL_SMOOTH);
-        //glEnable(GL_DEPTH_TEST);
-
-        glViewport(0, 0, width, height);
-
-        ratio = (GLfloat) width / height;
-        //glMatrixMode(GL_PROJECTION);
-        //glLoadIdentity();
-        //glFrustumf(-ratio, ratio, -1, 1, 1, 10);
-    }
-
-    auto resize(int width, int height) -> void
-    {
-        // unsupported
-    }
-
-    auto poll() -> void
-    {
-        // unsupported
-    }
-
-    auto should_close() -> bool
-    {
-        return false;
-    }
-
-    auto swap_buffers() -> void
-    {
-        eglSwapBuffers(_display, _surface);
-    }
-
-private:
-    EGLDisplay _display;
-    EGLSurface _surface;
-    EGLContext _context;
-};
-
 #endif
 
 class Shader
@@ -252,6 +82,11 @@ public:
         _texcoord_loc = glGetAttribLocation(_id, name.c_str());
     }
 
+    void enable_uniform(const std::string &name)
+    {
+        _uniforms[name] = glGetUniformLocation(_id, name.c_str());
+    }
+
     GLint get_attrib_vert() const
     {
         return _vert_loc;
@@ -267,23 +102,12 @@ public:
         TexInfo &tex_info = _textures[name];
 
         glGenTextures(1, &tex_info.id);
-
-        if (GLenum err = glGetError(); err != GL_NO_ERROR) {
-            while (err != GL_NO_ERROR) {
-                ERROR("glGenTextures() -> -1 (%d)\n", err);
-                err = glGetError();
-            }
-        }
-
-        glActiveTexture(GL_TEXTURE0);
         tex_info.uniform_loc = glGetUniformLocation(_id, name.c_str());
     }
 
     void update_texture(const std::string &name, GLsizei w, GLsizei h, GLint intern_fmt, GLenum data_fmt, GLenum data_type, const void *data)
     {
         const auto &tex_info = _textures.at(name);
-
-        INFO("glTexImage2D (%d w) (%d h) (%d ifmt) (%d dfmt) (%d dtype)\n", w, h, intern_fmt, data_fmt, data_type);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tex_info.id);
@@ -295,23 +119,37 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         glTexImage2D(GL_TEXTURE_2D, 0, intern_fmt, w, h, 0, data_fmt, data_type, data);
-
-        if (GLenum err = glGetError(); err != GL_NO_ERROR) {
-            while (err != GL_NO_ERROR) {
-                ERROR("glTexImage() -> -1 (%d)\n", err);
-                err = glGetError();
-            }
-        }
-
         glGenerateMipmap(GL_TEXTURE_2D);
+    }
 
-        if (GLenum err = glGetError(); err != GL_NO_ERROR) {
-            while (err != GL_NO_ERROR) {
-                ERROR("glGenerateMipmaps() -> -1 (%d)\n", err);
-                err = glGetError();
-            }
-        }
+    void update_uniform(const std::string &name, int value)
+    {
+        glUniform1i(_uniforms.at(name), value);
+    }
 
+    void update_uniform(const std::string &name, float value)
+    {
+        glUniform1f(_uniforms.at(name), value);
+    }
+
+    void update_uniform(const std::string &name, const std::array<int, 2> &values)
+    {
+        glUniform2i(_uniforms.at(name), values[0], values[1]);
+    }
+
+    void update_uniform(const std::string &name, const std::array<int, 4> &values)
+    {
+        glUniform4i(_uniforms.at(name), values[0], values[1], values[2], values[3]);
+    }
+
+    void update_uniform(const std::string &name, const std::array<float, 2> &values)
+    {
+        glUniform2f(_uniforms.at(name), values[0], values[1]);
+    }
+
+    void update_uniform(const std::string &name, const std::array<float, 4> &values)
+    {
+        glUniform4f(_uniforms.at(name), values[0], values[1], values[2], values[3]);
     }
 
     void use() const
@@ -342,6 +180,7 @@ private:
     };
 
     std::unordered_map<std::string, TexInfo> _textures;
+    std::unordered_map<std::string, GLint> _uniforms;
 
     void check_shader_status(const char *name, int shader)
     {
@@ -353,8 +192,7 @@ private:
         if (!ok)
         {
             glGetShaderInfoLog(shader, sizeof err, 0, err);
-            printf("%s error: %s\n", name, err);
-            exit(1);
+            ERROR("%s error: %s\n", name, err);
         }
     }
 };
@@ -436,6 +274,7 @@ static const char *img_vert_src = "\
 attribute vec2 a_vert;\n\
 attribute vec2 a_texcoord;\n\
 varying vec2 v_texcoord;\n\
+uniform ivec2 dims;\n\
 void main()\n\
 {\n\
     v_texcoord = a_texcoord;\n\
@@ -447,11 +286,93 @@ static const char *img_frag_src = "\
 #version 100\n\
 precision mediump float;\n\
 uniform sampler2D img;\n\
+uniform ivec2 dims;\n\
+uniform int hinv;\n\
 varying vec2 v_texcoord;\n\
 void main()\n\
 {\n\
-    vec4 s = texture2D(img, v_texcoord);\n\
-    gl_FragColor = vec4(vec3(s.a), 1.0);\n\
+    float screen_hwratio = float(dims.y) / float(dims.x);\n\
+    float video_whratio = 1.333333;\n\
+    float u_max = screen_hwratio / video_whratio;\
+    vec2 uv = v_texcoord.yx * vec2(u_max, 1.0);\
+    float free_u = u_max - 1.0;\n\
+    uv.x -= free_u / 2.0;\n\
+    if (uv.x < 0.0 || uv.x > 1.0) {\
+        gl_FragColor = vec4(vec3(0.0), 1.0);\n\
+    } else {\n\
+        if (hinv > 0) {\n\
+            uv.y = (1.0 - uv.y);\n\
+        }\n\
+        vec4 s = texture2D(img, uv);\n\
+        gl_FragColor = vec4(vec3(s.a), 1.0);\n\
+    }\n\
+}\n\
+";
+
+static const char *overlay_vert_src = "\
+#version 100\n\
+attribute vec2 a_vert;\n\
+attribute vec2 a_texcoord;\n\
+varying vec2 v_texcoord;\n\
+uniform ivec2 dims;\n\
+void main()\n\
+{\n\
+    v_texcoord = a_texcoord;\n\
+    gl_Position = vec4(a_vert.x, a_vert.y, 0.0, 1.0);\n\
+}\n\
+";
+
+static const char *overlay_frag_src = "\
+#version 100\n\
+precision mediump float;\n\
+uniform ivec2 dims;\n\
+uniform int hinv;\n\
+uniform vec2 obj1;\n\
+uniform int obj1_valid;\n\
+uniform vec2 obj2;\n\
+uniform int obj2_valid;\n\
+uniform vec2 obj3;\n\
+uniform int obj3_valid;\n\
+varying vec2 v_texcoord;\n\
+void main()\n\
+{\n\
+    float screen_hwratio = float(dims.y) / float(dims.x);\n\
+    float video_whratio = 1.333333;\n\
+    float u_max = screen_hwratio / video_whratio;\
+    vec2 uv = v_texcoord.yx * vec2(u_max, 1.0);\
+    float free_u = u_max - 1.0;\n\
+    uv.x -= free_u / 2.0;\n\
+    if (uv.x < 0.0 || uv.x > 1.0) {\
+        gl_FragColor = vec4(vec3(0.0), 1.0);\n\
+    } else {\n\
+        if (hinv > 0) {\n\
+            uv.y = (1.0 - uv.y);\n\
+        }\n\
+        vec3 color = vec3(0.0);\n\
+        float a = 0.0;\n\
+        if (obj1_valid > 0) {\n\
+            float d = length((uv - obj1) * (uv - obj1));\n\
+            if (d < 0.01 && d > 0.009) {\n\
+                color.r = 1.0;\n\
+                a = 0.5;\n\
+            }\n\
+        }\n\
+        if (obj2_valid > 0) {\n\
+            float d = length((uv - obj2) * (uv - obj2));\n\
+            if (d < 0.5 && d > 0.45) {\n\
+                color.g = 1.0;\n\
+                a = 0.5;\n\
+            }\n\
+        }\n\
+        if (obj3_valid > 0) {\n\
+            float d = length((uv - obj3) * (uv - obj3));\n\
+            if (d < 0.5 && d > 0.45) {\n\
+                color.b = 1.0;\n\
+                a = 0.5;\n\
+            }\n\
+        }\n\
+        gl_FragColor = vec4(color, a);\n\
+    }\n\
 }\n\
 ";
 
@@ -461,16 +382,34 @@ public:
     OpenGLVideoDisplay(IWindow *window):
         _window(window),
         _img_mesh(_img_shader),
+        _overlay_mesh(_overlay_shader),
         _next_frame(nullptr)
     {
+        _overlay_shader.load(overlay_vert_src, overlay_frag_src);
+        _overlay_shader.enable_attrib_vert("a_vert");
+        _overlay_shader.enable_attrib_texcoord("a_texcoord");
+        _overlay_shader.enable_uniform("dims");
+        _overlay_shader.enable_uniform("hinv");
+        _overlay_shader.enable_uniform("obj1");
+        _overlay_shader.enable_uniform("obj2");
+        _overlay_shader.enable_uniform("obj3");
+        _overlay_shader.enable_uniform("obj1_valid");
+        _overlay_shader.enable_uniform("obj2_valid");
+        _overlay_shader.enable_uniform("obj3_valid");
+
         _img_shader.load(img_vert_src, img_frag_src);
         _img_shader.add_texture("img");
         _img_shader.enable_attrib_vert("a_vert");
         _img_shader.enable_attrib_texcoord("a_texcoord");
+        _img_shader.enable_uniform("dims");
+        _img_shader.enable_uniform("hinv");
 
         _img_mesh.make_rect(-1.0f, -1.0f, 2.0f, 2.0f);
+        _overlay_mesh.make_rect(-1.0f, -1.0f, 2.0f, 2.0f);
 
         glClearColor(0.3, 0.0, 0.3, 1.0);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
 
     virtual auto open() -> void override {}
@@ -482,7 +421,9 @@ private:
 
     std::atomic<VideoFrame*> _next_frame;
     Shader _img_shader;
+    Shader _overlay_shader;
     Mesh _img_mesh;
+    Mesh _overlay_mesh;
 };
 
 auto OpenGLVideoDisplay::set_video_frame(const VideoFramePtr& frame) -> void
@@ -516,6 +457,29 @@ auto OpenGLVideoDisplay::set_video_frame(const VideoFramePtr& frame) -> void
 
 auto OpenGLVideoDisplay::update() -> bool
 {
+    auto [w, h] = _window->get_size();
+
+    struct obj_desc
+    {
+        std::string name;
+        int valid;
+        float x, y;
+    };
+
+    std::array<obj_desc, 3> objs;
+    objs[0].name = "obj1";
+    objs[0].valid = 0;
+    objs[1].name = "obj2";
+    objs[1].valid = 0;
+    objs[2].name = "obj3";
+    objs[2].valid = 0;
+
+    objs[0].valid = 1;
+    objs[0].x = 0.5f;
+    objs[0].y = 0.0f;
+
+    INFO("Window (%dx%d)\n", w, h);
+
     _window->poll();
 
     if (VideoFrame *frame = _next_frame.exchange(nullptr); frame) {
@@ -530,7 +494,23 @@ auto OpenGLVideoDisplay::update() -> bool
     glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     _img_shader.use();
+    _img_shader.update_uniform("dims", std::array{w, h});
+    _img_shader.update_uniform("hinv", 0);
     _img_mesh.draw();
+
+    _overlay_shader.use();
+    _overlay_shader.update_uniform("dims", std::array{w, h});
+    _overlay_shader.update_uniform("hinv", 0);
+
+    for (auto &obj : objs) {
+        _overlay_shader.update_uniform(obj.name + "_valid", obj.valid);
+
+        if (obj.valid) {
+            _overlay_shader.update_uniform(obj.name,  std::array{obj.x, obj.y});
+        }
+    }
+
+    _overlay_mesh.draw();
 
     _window->swap_buffers();
 
@@ -539,21 +519,12 @@ auto OpenGLVideoDisplay::update() -> bool
 
 #ifndef __ANDROID__
 auto create_glfw_video_display(int width, int height) -> IVideoDisplay*
-
 {
     return new OpenGLVideoDisplay(new GlfwWindow(width, height));
 }
-#else
-auto create_null_video_display() -> IVideoDisplay*
-{
-    return new OpenGLVideoDisplay(new NullWindow);
-}
+#endif
 
-auto create_android_video_display(ANativeWindow *awindow) -> IVideoDisplay*
+auto create_user_window_video_display(IWindow *window) -> IVideoDisplay*
 {
-    auto *window = new AndroidWindow();
-    window->init_egl(awindow);
-
     return new OpenGLVideoDisplay(window);
 }
-#endif
