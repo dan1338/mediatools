@@ -25,6 +25,8 @@ public:
         glAttachShader(_id, vert_id);
         glAttachShader(_id, frag_id);
         glLinkProgram(_id);
+
+        glUseProgram(_id);
     }
 
     void enable_attrib(const std::string &name)
